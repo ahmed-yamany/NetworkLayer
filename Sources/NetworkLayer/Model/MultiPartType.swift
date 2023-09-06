@@ -16,21 +16,15 @@ public enum FilesTypes: String, CaseIterable {
 
 /// To represent a file as multipart data
 public struct MultiPartType {
-    
     /// The type of the file (as defined in the enum)
     let type: FilesTypes
-    
     /// The file extension (e.g. "png", "mp4")
     let extention: String
-    
     /// The actual file data as a `Data` object
     let data: Data
-
-    
     public init(type: FilesTypes, extention: String, data: Data) {
         self.type = type
         self.extention = extention
         self.data = data
     }
-    
 }
