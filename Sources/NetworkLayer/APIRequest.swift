@@ -7,11 +7,15 @@ import Foundation
 import Alamofire
 import Combine
 
+public protocol BackendErrorMessage: Error, Codable {
+    var localizedDescription: String { get }
+}
+
 @available(iOS 13.0, *)
 public protocol APIRequest {
     /// The associated type representing the expected response type (must conform to Codable).
     associatedtype DecodableType where DecodableType: Codable
-    associatedtype BackendErrorType where BackendErrorType: Codable & Error
+    associatedtype BackendErrorType where BackendErrorType: BackendErrorMessage
     /// The network request configuration for the API request.
     var networkRequest: NetworkRequest { get }
     /// A set of cancellable objects to manage the API request's lifecycle.
@@ -31,18 +35,30 @@ extension APIRequest {
      - Returns: A publisher that maps errors to `NetworkError` and wraps the response.
      */
     internal func mapError(with dataResponse: DataResponsePublisher<DecodableType>
-        ) -> Publishers.Map<DataResponsePublisher<DecodableType>, DataResponse<DecodableType, Error>> {
+        ) -> AnyPublisher<DecodableType, Error> {
         return dataResponse.map { response in
             response.mapError { error in
                 let networkError: Error
                 if let backendError = response.data.flatMap({ try? JSONDecoder().decode(BackendErrorType.self, from: $0)}) {
                     networkError = backendError
                 } else {
+                    print(error.localizedDescription)
                     networkError = error
+//                    fatalError()
                 }
                 return networkError
             }
         }
+        .receive(on: DispatchQueue.main) // 4
+        .tryMap { response -> Self.DecodableType in
+            if let error = response.error {
+                throw error
+            }
+            // swiftlint: disable all
+            return response.value!
+            // swiftlint: enable all
+        }
+        .eraseToAnyPublisher() // 5
     }
 }
 
@@ -53,17 +69,24 @@ extension APIRequest {
 
     - Returns: A publisher for the API request response wrapped in a `DataResponse`.
     */
-    public func request() -> AnyPublisher<DataResponse<DecodableType, Error>, Never> {
+    public func request() -> AnyPublisher<DecodableType, Error> {
+        let dataRequest: DataRequest
+        if let body = self.networkRequest.body {
+            dataRequest = AF.request(url, method: networkRequest.method,
+                                     parameters: body,
+                                     encoding: URLEncoding.httpBody,
+                                     headers: networkRequest.headers )
+        } else {
+            dataRequest = AF.request(url, method: networkRequest.method,
+                                     parameters: networkRequest.parameters,
+                                     encoding: URLEncoding.queryString,
+                                     headers: networkRequest.headers )
+        }
         // 0
-        let request = AF.request(url, method: networkRequest.method,
-                                 parameters: networkRequest.parameters,
-                                 encoding: URLEncoding.queryString,
-                                 headers: networkRequest.headers )
-                        .validate() // 1
-                        .publishDecodable(type: DecodableType.self) // 2
+        let request = dataRequest
+            .validate() // 1
+            .publishDecodable(type: DecodableType.self) // 2
         return mapError(with: request) // 3
-                .receive(on: DispatchQueue.main) // 4
-                .eraseToAnyPublisher() // 5
     }
 }
 @available(iOS 13.0, *)
@@ -73,10 +96,20 @@ extension APIRequest {
 
     - Parameter completion: A closure to handle the API response.
     */
-    public mutating func request(_ completion: @escaping (DataResponse<DecodableType, Error>) -> Void) {
-        self.request().sink { response in
-            completion(response)
-        }.store(in: &cancellableSet)
+    public mutating func request(onSuccess: @escaping (Self.DecodableType) -> Void, onError: @escaping (String) -> Void) {
+        self.request()
+            .sink(receiveCompletion: { completion in
+                switch completion {
+                case .finished:
+                    break
+                case .failure(let failure):
+                    onError(failure.localizedDescription)
+                }
+            }, receiveValue: { value in
+                onSuccess(value)
+            })
+            .store(in: &cancellableSet)
+
     }
     /**
     Cancels all active API request publishers in the `cancellableSet`.

@@ -20,7 +20,7 @@ extension APIRequest {
     - Parameter multiPart: A dictionary containing the multipart data to be included in the request.
     - Returns: A publisher for the multipart API request response wrapped in a `DataResponse`.
     */
-    public func request(multiPart: [String: MultiPartType]) -> AnyPublisher<DataResponse<DecodableType, Error>, Never> {
+    public func request(multiPart: [String: MultiPartType]) -> AnyPublisher<DecodableType, Error> {
         let request = AF.upload( multipartFormData: { self.update($0, with: multiPart) },
                                  to: self.url,
                                  method: networkRequest.method,
@@ -28,8 +28,6 @@ extension APIRequest {
             .validate()
             .publishDecodable(type: DecodableType.self)
         return mapError(with: request)
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
     }
     /**
       Updates the `MultipartFormData` with the specified multipart data.

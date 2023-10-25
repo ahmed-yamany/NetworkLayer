@@ -13,6 +13,7 @@ public struct NetworkRequest {
     public private(set) var endpoint: String
     public private(set) var method: HTTPMethod
     public private(set) var parameters: Parameters
+    public private(set) var body: Parameters?
     public private(set) var headers: HTTPHeaders
     public init(host: String,
                 endpoint: String,
@@ -30,5 +31,9 @@ public struct NetworkRequest {
     }
     public mutating func update(headers: [String: String]) {
         headers.forEach { self.headers.update(name: $0, value: $1) }
+    }
+    public mutating func update(body: Parameters) {
+        self.body = [:]
+        body.forEach { self.body?[$0] = $1 }
     }
 }
