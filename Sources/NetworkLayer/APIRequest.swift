@@ -10,7 +10,9 @@ import Combine
 public protocol BackendErrorMessage: Error, Codable {
     var localizedDescription: String { get }
 }
-
+struct BackEnd: BackendErrorMessage {
+    let localizedDescription: String
+}
 @available(iOS 13.0, *)
 public protocol APIRequest {
     /// The associated type representing the expected response type (must conform to Codable).
@@ -34,17 +36,14 @@ extension APIRequest {
      - Parameter dataResponse: The publisher to map errors from.
      - Returns: A publisher that maps errors to `NetworkError` and wraps the response.
      */
-    internal func mapError(with dataResponse: DataResponsePublisher<DecodableType>
-        ) -> AnyPublisher<DecodableType, Error> {
+    internal func mapError(with dataResponse: DataResponsePublisher<DecodableType>) -> AnyPublisher<DecodableType, Error> {
         return dataResponse.map { response in
             response.mapError { error in
                 let networkError: Error
                 if let backendError = response.data.flatMap({ try? JSONDecoder().decode(BackendErrorType.self, from: $0)}) {
                     networkError = backendError
                 } else {
-                    print(error.localizedDescription)
                     networkError = error
-//                    fatalError()
                 }
                 return networkError
             }
@@ -96,14 +95,19 @@ extension APIRequest {
 
     - Parameter completion: A closure to handle the API response.
     */
-    public mutating func request(onSuccess: @escaping (Self.DecodableType) -> Void, onError: @escaping (String) -> Void) {
+    public mutating func request(onSuccess: @escaping (Self.DecodableType) -> Void,
+                                 onError: @escaping (BackendErrorMessage) -> Void) {
         self.request()
             .sink(receiveCompletion: { completion in
                 switch completion {
                 case .finished:
                     break
-                case .failure(let failure):
-                    onError(failure.localizedDescription)
+                case .failure(let error):
+                    if let error = error as? BackendErrorMessage {
+                        onError(error)
+                    } else {
+                        onError(BackEnd(localizedDescription: error.localizedDescription))
+                    }
                 }
             }, receiveValue: { value in
                 onSuccess(value)
