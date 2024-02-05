@@ -15,10 +15,26 @@ public enum FilesTypes: String, CaseIterable {
     case video
 }
 
+public enum FilesExtension: String, CaseIterable {
+    case png = ".png"
+    case jpg = ".jpg"
+    case jpeg = ".jpeg"
+    case mp4 = ".mp4"
+    case mp3 = ".mp3"
+    case mkv = ".mkv"
+    case txt = ".txt"
+}
+
 public struct MultiPartType {
-    let fileType: FilesTypes
-    let fileExtension: String
-    let data: Data
+    public let fileType: FilesTypes
+    public let fileExtension: FilesExtension
+    public let data: Data
+    
+    public init(fileType: FilesTypes, fileExtension: FilesExtension, data: Data) {
+        self.fileType = fileType
+        self.fileExtension = fileExtension
+        self.data = data
+    }
 }
 
 @available(iOS 13.0, *)
@@ -31,6 +47,35 @@ extension APIRequest {
         .validate()
         .publishDecodable(type: DecodableType.self)
         .handleBackendErrors(ofType: BackendErrorType.self)
+    }
+    
+    public func request(
+        multiPart: [String: MultiPartType],
+        onSuccess: @escaping (DecodableType) -> Void,
+        onError: @escaping (Error) -> Void
+    ) {
+        self.request(multiPart: multiPart)
+            .sink(receiveCompletion: { completion in
+                switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        onError(error)
+                }
+            }, receiveValue: { value in
+                onSuccess(value)
+            })
+            .store(in: &cancellableSet)
+    }
+    
+    public func request(multiPart: [String: MultiPartType]) async throws -> DecodableType {
+        try await withCheckedThrowingContinuation { continuation in
+            self.request(multiPart: multiPart, onSuccess: { value in
+                continuation.resume(with: .success(value))
+            }, onError: { error in
+                continuation.resume(throwing: error)
+            })
+        }
     }
  
     private func update(_ multiPartFormData: MultipartFormData, with multiPart: [String: MultiPartType]) {
