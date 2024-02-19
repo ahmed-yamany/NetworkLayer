@@ -16,13 +16,13 @@ public enum FilesTypes: String, CaseIterable {
 }
 
 public enum FilesExtension: String, CaseIterable {
-    case png = ".png"
-    case jpg = ".jpg"
-    case jpeg = ".jpeg"
-    case mp4 = ".mp4"
-    case mp3 = ".mp3"
-    case mkv = ".mkv"
-    case txt = ".txt"
+    case png = "png"
+    case jpg = "jpg"
+    case jpeg = "jpeg"
+    case mp4 = "mp4"
+    case mp3 = "mp3"
+    case mkv = "mkv"
+    case txt = "txt"
 }
 
 public struct MultiPartType {
